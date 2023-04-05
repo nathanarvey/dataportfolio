@@ -1,0 +1,272 @@
+---
+title: "BellaBeat Fitness Tracker Analysis"
+author: "Nathan Arvey"
+date: "2023-04-04"
+output: rmdformats::readthedown
+
+      
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(stringr)
+dailyActivity_merged <- read.csv("dailyActivity_merged.csv")
+sleepDay_merged <- read.csv("sleepDay_merged.csv")
+timeIntensities<- read_csv("hourlyIntensities_merged2.csv")
+```
+
+# Introduction
+
+BellaBeat is a high-tech company that manufactures health-focused smart products. This analysis considers the marketing and product strategies that BellaBeat should consider for the products **Time**- a wellness watch with smart technology to track user activity, sleep, and stress, and **Leaf** - Bellabeat’s classic wellness tracker that can be worn as a bracelet, necklace, or clip and tracks activity, sleep, and stress. 
+
+### Buisiness Tasks
+BellaBeat has asked the following: 
+
+* What are some trends in smart device usage?
+* How could these trends apply to Bellabeat customers?
+* How could these trends help influence Bellabeat marketing strategy?
+
+### The data analyzed
+This data set contains personal fitness tracker from thirty fitbit users. Thirty eligible Fitbit users consented to the submission of personal tracker data, including minute-level output for physical activity, heart rate, and sleep monitoring. It includes information about daily activity, steps, and heart rate that can be used to explore users’ habits. Data was obtained from the Kaggle data set [FitBit Fitness Tracker Data](https://www.kaggle.com/datasets/arashnic/fitbit) (CC0: Public Domain, dataset made available through [Mobius](https://www.kaggle.com/arashnic))
+
+### Findings
+Through this analysis, the following takeaways should be noted:
+
+  * Wearing a fitness tracker increases step count, which in turn increases burned calories
+  * Less sedentary time increases amount of sleep
+  * Most users workout between 11:00am to 4:00pm. Live advertising should be done in this time frame.
+  * BellaBeat should consider implementing a movement reminder in their wearable devices and app to reduce sedentary time and improve sleep time. 
+
+
+
+
+# Organizing and Cleaning the data
+
+### A Quick View of the data
+
+Here is a quick view of some of the data:
+
+```{r viewing activity}
+tibble(dailyActivity_merged)
+```
+
+```{r viewing sleep}
+tibble(sleepDay_merged)
+```
+
+```{r viewing intensities}
+tibble(timeIntensities)
+```
+
+### Cleaning the data
+
+I created a new data frame "realActivity" that took removed records from dailyActivity_merged that recorded 0 steps or burned less than 500 calories. These were assumed to be misread days or days that the fitbit was not used. 
+
+```{r create realActivity}
+realActivity <-dailyActivity_merged %>% 
+  filter(TotalSteps>100,Calories>500)
+
+glimpse(realActivity)
+
+```
+
+The dates in dailyActivity_merged and sleepDay_merged are saved as characters, and are not in the correct format. These will be changed to be as class "date" in year-month-day format. 
+
+```{r cleaning dates}
+realActivity$ActivityDate<-as.Date(realActivity$ActivityDate,"%m/%d/%Y")
+realActivity$Date<-realActivity$ActivityDate
+sleepDay_merged$SleepDay <- as.Date(sleepDay_merged$SleepDay,"%Y-%m-%d")
+sleepDay_merged$Date <- sleepDay_merged$SleepDay
+timeIntensities <- timeIntensities %>% 
+  rename("ADate"="ActivityHour")
+```
+
+I also added a new column in each data set named "NewId", and checked that all records still contained a unique ID. This was for aesthetic purposes when graphing:
+
+```{r newID realactivity}
+realActivity$NewId <- str_extract(realActivity$Id,"\\d{5}$")
+n_distinct(realActivity$Id)
+n_distinct(realActivity$NewId)
+```
+
+```{r newID sleep}
+sleepDay_merged$NewId <- str_extract(sleepDay_merged$Id,"\\d{5}$")
+n_distinct(sleepDay_merged$Id)
+n_distinct(sleepDay_merged$NewId)
+```
+
+```{r newID intensity}
+timeIntensities$NewId <-str_extract(timeIntensities$Id,"\\d{5}$")
+head(timeIntensities)
+n_distinct(timeIntensities$NewId)
+n_distinct(timeIntensities$Id)
+```
+
+
+Finally, I created a new data frame SleepActivity by merging realActivity and SleepDay_merged inner joined on ID and Date
+
+```{r creating sleep activity}
+SleepActivity <- merge(realActivity,sleepDay_merged,by=c("Id","Date"))
+sedmin <- SleepActivity$SedentaryMinutes
+sleepTime <- SleepActivity$TotalMinutesAsleep
+
+glimpse(SleepActivity)
+
+```
+
+# Analysis 
+
+Several variables were analyzed from the data collected from participants wearing a fitbit. Total Steps and Burned Calories were analyzed to gauge overall health and activity of participants. Time of exercise preference was analyzed for marketing. Effects on sleep time was also analyzed for product suggestion and market purposes. 
+
+
+
+### Steps and Calories
+
+Overall, participants in this survey had a mean number of steps of 8426 steps. This data was slightly skewed however, so analyzing the median of 8115 steps is more appropriate. Below is a histogram of the Total Steps recorded each day, along with the summary statistics:
+
+```{r step histogram}
+ggplot(data = realActivity) +
+  geom_histogram(mapping=aes(x=TotalSteps),binwidth = 5000,color="black",fill="red")+
+  labs(title="Total Steps Recorded Each Day", caption = "Data from FitBit Fitness Tracker dailyActivity_merged",x="Total Steps",y="Count")
+
+summary(realActivity$TotalSteps)
+```
+
+This seems to support [John Hopkins Medincine's Report](https://www.hopkinsmedicine.org/health/wellness-and-prevention/could-a-fitness-tracker-boost-your-heart-health#:~:text=A%20fitness%20tracker%20may%20help,a%20heart%2Dsmart%20daily%20goal.) that fitness trackers seem to increase step counts from the average american's 1500-2000 steps per day. This number of steps could lead to lower mortality risk as reported in an artical published by the Lancet ["Daily Steps and all-cause Mortality: a meta-analysis of 15 international cohorts"](https://www.thelancet.com/journals/lanpub/article/PIIS2468-2667(21)00302-9/fulltext#seccestitle140). **This should be a point of advertisement for BellaBeat's fitness trackers.**
+
+Participants also burned a median of 2225 calories each day. This is shown in the histogram and summary statistics below:
+
+```{r calories histogram}
+ggplot(data = realActivity) +
+  geom_histogram(mapping=aes(x=Calories),binwidth = 500,color="black",fill="red")+
+  labs(title="Calories Each Day", caption = "Data from FitBit Fitness Tracker dailyActivity_merged",x="Calories Burned",y="Count")
+
+summary(realActivity$Calories)
+```
+
+While no calorie intake data was collected, **the advertising department could claim that fitness tracker wearing indivduals typically burn more than 2200 calories a day, the number of recommended intake calories by the [US Dietary Guidelines](https://health.gov/sites/default/files/2019-09/2015-2020_Dietary_Guidelines.pdf)**. 
+
+As suspected, participants who took more steps daily tended to burn more calories. This can be seen in the two plots below. The first plot shows number of steps taken and number of calories burned faceted by particpant id:
+```{r step and calorie scatterplot faceted}
+ggplot(data=realActivity) +
+  geom_point(mapping=aes(x=TotalSteps,y=Calories,color=NewId))+
+  geom_smooth(mapping=aes(x=TotalSteps,y=Calories),se=FALSE,method="lm",color="black")+
+  facet_wrap(vars(NewId))+
+  theme(legend.position = "none")+
+  guides(x = guide_axis(angle = 90))
+```
+
+The second shows the total number steps taken and number of calories burned by each participant on the same plot:
+
+```{r step and calorie scatterplot totals}
+ggplot(data=realActivity) +
+  geom_point(mapping=aes(x=TotalSteps,y=Calories,color=NewId))+
+  geom_smooth(mapping=aes(x=TotalSteps,y=Calories,),color="red")+
+  theme(legend.position = "none")+
+  labs(title="Total Steps taken and Calories Burned",subtitle = "Colored by ID Number",caption="data from FitBit Fitness Tracker dailyActivity_merged", x="Total Steps")+
+  annotate(geom="text",label="r = 0.5494159",x=25000,y=2000)
+
+cor(realActivity$TotalSteps,realActivity$Calories)
+```
+
+As seen in the second plot, a there is a clear correlation between number of steps taken and calories burned, with a correlation coefficient of r = 0.5494. **This further places importance on the effect of wearing a fitness tracker, and it's link to a healthy lifestyle. This should be heavily advertised by BellaBeat**
+
+
+### Sleep Analysis
+Sleep is an extremely important aspect of human health. While the number of steps clearly impacts burning calories, the connection between the total number of steps and number of sleep minutes is not as clear. Below is a scatterplot showing this: 
+
+```{r steps and sleep scatterplot}
+ggplot(data = SleepActivity)+
+  geom_point(mapping=aes(x=TotalSteps,y=sleepTime),color="blue")+
+  geom_smooth(mapping=aes(x=TotalSteps,y=sleepTime),color="red",method="lm",se=FALSE)+
+  labs(title="Total Steps and Sleep Time (in Minutes)",caption="data from FitBit Fitness Tracker dailyActivity_merged and sleepDay_merged",x="Total Steps",y="Time Asleep (in minutes)")+
+  annotate(geom="text",label= "r = -0.1944179", x=17000,y=700)
+
+cor(SleepActivity$TotalSteps,sleepTime)
+```
+
+This plot suprisingly shows a *negative* correlation between steps and sleep. This seems counter-intuitive, so further analysis is required. The amount of time that each fitness tracker recorded that the participant was sedentary is plotted against sleep time, and a more clear correlation can be observed:
+
+```{r sed and sleep scatterplot}
+ggplot(data = SleepActivity)+
+  geom_point(mapping=aes(x=sedmin,y=sleepTime),color="blue")+
+  geom_smooth(mapping=aes(x=sedmin,y=sleepTime),color="red",method="lm",se=FALSE)+
+  labs(title="Sedentary Minutes and Sleep Time (in Minutes)",caption="data from FitBit Fitness Tracker dailyActivity_merged and sleepDay_merged",x="Sedentary Time (in minutes)",y="Time Asleep (in minutes)")+
+  annotate(geom="text",label= "r = -0.640632", x=325,y=200)
+
+cor(sedmin,sleepTime)
+
+```
+
+There is a clear correlation between sedentary time and the time that a participant sleeps. [According to the CDC](https://www.cdc.gov/sleep/about_sleep/how_much_sleep.html) the average adult needs 7+ hours (420 minutes) of sleep. Below the linear regression model is calculated, and then solved:
+
+```{r linreg for sed and sleep time}
+reg <- lm(sedmin ~ sleepTime,data = SleepActivity)
+reg
+
+(420-1075.8918)/-0.8582
+```
+
+The model suggests that adults should have no more than 764.226 minutes of sedentary time. Note: Sedentary time does *not* include time asleep. **The design team should implement a reminder in the fitness tracker for users to move for approximately 13 minutes (764/12 = 12.73) minutes every hour for 12 hours during normal waking hours(8:00am - 8:00pm), or make this time frame customizable to the user** 
+
+
+### Excerise Intensity
+
+Participant exercise was analyzed by considering the "Total Intensity" recorded. Below is a plot that shows individual particpant excercise over time:
+
+```{r individual excercise}
+ggplot(data=timeIntensities)+
+  geom_line(mapping=aes(x=Time,y=TotalIntensity,group=ADate,color=NewId))+
+  facet_wrap(vars(NewId))+
+  theme(legend.position = "none")+
+  labs(title="Individual User Total Inensity by time")+
+  guides(x = guide_axis(angle = 90))
+```
+
+While a few of the participants seem to have active times in the morning, more of them appear to be active in the afternoon. The plot below confirms this:
+
+```{r average intensity measure over time}
+ggplot(data=timeIntensities)+
+  geom_smooth(mapping=aes(x=Time,y=AverageIntensity, group=ADate,color=ADate),se=FALSE)+
+  theme(legend.position = "none")+
+  labs(title="Average Intensity Measure Over Time",subtitle="Grouped By Date",y="Average Intensity",caption="Data From FitBit Fitness Tracker hourlyIntensities_merged")
+```
+
+This plot shows the average intensity of each individual participant throughout the day. There is a peak in activity from 11:00am to 4:00pm. **This time frame would be best for advertisements to be purchased on digital radio stations such as Pandora and Spotify workout stations.**
+
+# Conclusions
+
+BellaBeat's Marketing should focus on three key takeaways from this data. 
+
+  * Wearing a fitness tracker increases step count, which in turn increases burned calories
+  * Less sedentary time increases amount of sleep
+  * Most users workout between 11:00am to 4:00pm. Live advertising should be done in this time frame.
+
+BellaBeat should also consider implementing a movement reminder in their wearable devices and app to reduce sedentary time and improve sleep time. 
+
+
+
+# Appendix
+
+### Data Sets:
+
+[FitBit Fitness Tracker Data](https://www.kaggle.com/datasets/arashnic/fitbit) (CC0: Public Domain, dataset made available through [Mobius](https://www.kaggle.com/arashnic))
+
+* dailyActivity_merged
+* sleepDay_merged
+* timeIntensities
+
+
+### Change Log
+[Change log link](https://drive.google.com/file/d/1_m1rIY89HJu7G8qTNxAZcDJwsQNE5lnT/view?usp=share_link)
+
+### References
+
+* [John Hopkins Medincine's Report: could a fitness tracker boost your heart health?](https://www.hopkinsmedicine.org/health/wellness-and-prevention/could-a-fitness-tracker-boost-your-heart-health#:~:text=A%20fitness%20tracker%20may%20help,a%20heart%2Dsmart%20daily%20goal.)
+* ["The Lancet: Daily Steps and all-cause Mortality: a meta-analysis of 15 international cohorts"](https://www.thelancet.com/journals/lanpub/article/PIIS2468-2667(21)00302-9/fulltext#seccestitle140)
+* [US Dietary Guidelines](https://health.gov/sites/default/files/2019-09/2015-2020_Dietary_Guidelines.pdf)
+* [CDC: How much sleep do I need?](https://www.cdc.gov/sleep/about_sleep/how_much_sleep.html)
